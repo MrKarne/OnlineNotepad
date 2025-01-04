@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Note Taking App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #f9fafc;
+        }
+        #left-panel {
+            width: 25%;
+            background-color: #2c3e50;
+            color: white;
+            border-right: 1px solid #ccc;
+            overflow-y: auto;
+            padding: 10px;
+            position: absolute;
+            top: 0;
+            left: -25%;
+            height: 100%;
+            transition: left 0.3s ease;
+            z-index: 2;
+        }
+        #left-panel.show {
+            left: 0;
+        }
+        @media (max-width: 768px) {
+            #left-panel {
+                width: 100%;
+                left: -100%;
+            }
+            #left-panel.show {
+                left: 0;
+            }
+        }
+        #left-panel h3 {
+            margin-top: 0;
+            color: #ecf0f1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #left-panel div {
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+            background-color: #34495e;
+            color: white;
+        }
+        #left-panel div:hover {
+            background-color: #3e5c72;
+        }
+        #main-panel {
+            width: 100%;
+            padding: 20px;
+            transition: margin-left 0.3s ease;
+        }
+        .top-buttons {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        #toggle-sidebar {
+            padding: 5px 10px;
+            font-size: 14px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #toggle-sidebar:hover {
+            background-color: #0056b3;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        input {
+            display: block;
+            width: 100%;
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        textarea {
+            display: block;
+            width: 100%;
+            height: 80vh;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            resize: none;
+        }
+        .close-btn {
+            background-color: transparent;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .close-btn:hover {
+            color: #ff6b6b;
+        }
+    </style>
+    <link rel="shortcut icon" href="./logo.svg" type="image/x-icon">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/editor/editor.main.min.css">
+</head>
+<body>
+    <div id="left-panel">
+        <h3>Saved Notes <button class="close-btn" id="close-sidebar">×</button></h3>
+        <div id="notes-list"></div>
+    </div>
+    <div id="main-panel">
+        <div class="top-buttons">
+            <button id="toggle-sidebar">☰</button>
+            <button id="new-note">New Note</button>
+            <button id="save-note">Save</button>
+        </div>
+        <div id="editor-container">
+            <input type="text" id="note-title" placeholder="Title">
+            <div id="editor" style="height: 60vh; border: 1px solid #ccc; border-radius: 5px;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.min.js"></script>
+    <script>
+        const notesList = document.getElementById('notes-list');
+        const noteTitle = document.getElementById('note-title');
+        const saveButton = document.getElementById('save-note');
+        const newNoteButton = document.getElementById('new-note');
+        const toggleSidebarButton = document.getElementById('toggle-sidebar');
+        const closeSidebarButton = document.getElementById('close-sidebar');
+        const leftPanel = document.getElementById('left-panel');
+
+        let notesContent = {}; // Store notes as title: content pairs
+        let currentNoteTitle = null;
+        let editorInstance;
+
+        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs' } });
+        require(['vs/editor/editor.main'], function() {
+            editorInstance = monaco.editor.create(document.getElementById('editor'), {
+                value: '',
+                language: 'plaintext',
+                theme: 'vs-dark',
+                automaticLayout: true
+            });
+        });
+
+        toggleSidebarButton.onclick = () => {
+            const isVisible = leftPanel.classList.contains('show');
+            leftPanel.classList.toggle('show', !isVisible);
+        };
+
+        closeSidebarButton.onclick = () => {
+            leftPanel.classList.remove('show');
+        };
+
+        function renderNotesList() {
+            notesList.innerHTML = '';
+            for (const title in notesContent) {
+                const noteDiv = document.createElement('div');
+                noteDiv.textContent = title || 'Untitled Note';
+                noteDiv.onclick = () => loadNoteForEditing(title);
+                notesList.appendChild(noteDiv);
+            }
+        }
+
+        function loadNoteForEditing(title) {
+            currentNoteTitle = title;
+            noteTitle.value = title;
+            editorInstance.setValue(notesContent[title]);
+        }
+
+        newNoteButton.onclick = () => {
+            noteTitle.value = '';
+            editorInstance.setValue('');
+            currentNoteTitle = null;
+        };
+
+        saveButton.onclick = async () => {
+            const title = noteTitle.value;
+            const content = editorInstance.getValue();
+            if (!title && !content) return; // Avoid saving empty notes
+
+            if (currentNoteTitle && notesContent[currentNoteTitle]) {
+                delete notesContent[currentNoteTitle]; // Remove old title entry if renaming
+            }
+
+            notesContent[title] = content;
+            currentNoteTitle = title;
+            renderNotesList();
+
+            try {
+                const response = await fetch('/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(notesContent)
+                });
+
+                if (!response.ok) throw new Error('Failed to save data');
+
+                alert('Your note has been saved!');
+            } catch (error) {
+                console.error('Error saving note:', error);
+                alert('Failed to save the note.');
+            }
+        };
+
+        async function loadData() {
+            try {
+                const response = await fetch('/load', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'include'
+                });
+
+                if (!response.ok) throw new Error('Failed to fetch data');
+
+                notesContent = await response.json();
+                renderNotesList();
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.altKey && event.key.toLowerCase() === 'z') {
+                event.preventDefault();
+                const currentWordWrap = editorInstance.getOption(monaco.editor.EditorOption.wordWrap);
+                editorInstance.updateOptions({
+                    wordWrap: currentWordWrap === 'on' ? 'off' : 'on'
+                });
+            }
+            if (event.ctrlKey && event.key.toLowerCase() === 's') {
+                event.preventDefault();
+                saveButton.click();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            const isClickInsidePanel = leftPanel.contains(event.target) || toggleSidebarButton.contains(event.target);
+            if (!isClickInsidePanel) {
+                leftPanel.classList.remove('show');
+            }
+        });
+
+        loadData();
+    </script>
+</body>
+</html>
